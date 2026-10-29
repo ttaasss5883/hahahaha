@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>アニメ診断マッチング</title>
+    <title>アニメ診断・15軸レーダーチャートで好みを徹底分析！無料マッチングツール</title>
+<meta name="description" content="15軸のレーダーチャートで自分好みのアニメを多角的に診断・マッチング！お気に入りの作品を評価・共有できる無料のWebアプリケーションです。">
     <!-- Tailwind CSS (デザイン用) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Chart.js (レーダーチャート用) -->
