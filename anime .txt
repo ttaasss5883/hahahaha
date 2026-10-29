@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アニメ診断マッチング</title>
+    <!-- Tailwind CSS (デザイン用) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js (レーダーチャート用) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Fuse.js (あいまい検索用) -->
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js/dist/fuse.js"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: sans-serif; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <!-- ヘッダー -->
+    <header class="bg-slate-900 border-b border-slate-800 p-4 flex justify-between items-center sticky top-0 z-50">
+        <h1 class="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+            アニメ診断マッチング
+        </h1>
+        <div class="bg-purple-950 border border-purple-700 px-3 py-1 rounded-full text-sm font-semibold text-purple-200">
+            🪙 所持コイン: <span id="coin-count">3</span>枚
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="container mx-auto p-4 max-w-2xl mb-20">
+
+        <!-- Tab 1: 診断画面 -->
+        <section id="tab-diagnosis" class="space-y-6">
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <h2 class="text-lg font-bold mb-3 text-purple-300">15軸シンクロ・レコメンド診断</h2>
+                <p class="text-xs text-slate-400 mb-4">あなたの好みの傾向を15軸（1〜7点）でスライド入力してください。（診断に1コイン消費します）</p>
+
+                <!-- 自由入力＆あいまい検索 -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-1">作品のキーワード検索・補完</label>
+                    <input type="text" id="user-search-input" placeholder="例: 進撃、呪術、チェンソー..." 
+                           class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm focus:outline-none focus:border-purple-500">
+                    <p id="search-feedback" class="text-xs text-purple-400 mt-1">💡 入力に合わせて自動で作品を推測します</p>
+                </div>
+
+                <!-- 15軸スライダー生成エリア -->
+                <div id="sliders-container" class="space-y-4 max-h-96 overflow-y-auto pr-2">
+                    <!-- JSで動的に15個のスライダーを生成します -->
+                </div>
+
+                <button onclick="runDiagnosis()" class="w-full mt-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold py-3 rounded-xl transition shadow-lg">
+                    診断する（🪙 1コイン消費）
+                </button>
+            </div>
+
+            <!-- 結果表示エリア -->
+            <div id="result-container" class="hidden bg-slate-800 p-5 rounded-2xl border border-purple-500/50 shadow-xl space-y-4">
+                <h3 class="text-xl font-bold text-center text-pink-400">✨ BEST MATCH ✨</h3>
+                <div id="match-title" class="text-2xl font-extrabold text-center text-white"></div>
+                <div id="match-score" class="text-lg font-bold text-center text-purple-300"></div>
+                <div class="relative w-full h-64 bg-slate-900/50 p-2 rounded-xl">
+                    <canvas id="radarChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 2: 作品を評価（コイン獲得） -->
+        <section id="tab-review" class="hidden space-y-6">
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <h2 class="text-lg font-bold mb-3 text-purple-300">作品を評価してコインを稼ぐ</h2>
+                <p class="text-xs text-slate-400 mb-4">他の作品に15軸の採点を行うと、即座にコインが +1枚手に入ります！</p>
+                
+                <div class="space-y-3">
+                    <label class="block text-sm font-medium">評価する作品名</label>
+                    <input type="text" id="review-anime-name" placeholder="例: 葬送のフリーレン" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm">
+                </div>
+
+                <div id="review-sliders-container" class="space-y-4 max-h-80 overflow-y-auto pr-2 mt-4">
+                    <!-- 評価用スライダー -->
+                </div>
+
+                <button onclick="submitReview()" class="w-full mt-6 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition shadow-lg">
+                    評価を送信して 🪙 +1コイン獲得
+                </button>
+            </div>
+        </section>
+
+        <!-- Tab 3: マイページ -->
+        <section id="tab-mypage" class="hidden space-y-6">
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg text-center space-y-4">
+                <div class="w-20 h-20 bg-purple-600 rounded-full mx-auto flex items-center justify-center text-2xl font-bold">
+                    私
+                </div>
+                <h2 class="text-xl font-bold">マイページ</h2>
+                <p class="text-sm text-slate-400">あなたがこれまでに診断した履歴や獲得したコインの管理画面です。</p>
+                <div class="bg-slate-900 p-4 rounded-xl inline-block">
+                    <p class="text-sm text-slate-400">現在の所持コイン</p>
+                    <p class="text-3xl font-extrabold text-purple-400" id="mypage-coins">3枚</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 下部タブナビゲーション -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex justify-around p-3 z-50">
+        <button onclick="switchTab('diagnosis')" id="btn-diagnosis" class="text-purple-400 font-bold text-xs flex flex-col items-center">
+            🔍 診断・レコメンド
+        </button>
+        <button onclick="switchTab('review')" id="btn-review" class="text-slate-400 text-xs flex flex-col items-center">
+            ⭐ 作品を評価
+        </button>
+        <button onclick="switchTab('mypage')" id="btn-mypage" class="text-slate-400 text-xs flex flex-col items-center">
+            👤 マイページ
+        </button>
+    </nav>
+
+    <!-- JavaScriptロジック -->
+    <script>
+        // 15軸の定義
+        const axes = [
+            "展開のスピード", "ストーリーの複雑さ", "緊張感", "伏線回収", "狂気度", 
+            "世界観の深さ", "ダーク度", "中毒性", "熱量・勢い", "作画の美しさ", 
+            "キャラクターの魅力", "感動・泣ける", "独自性・シュール", "爽快感", "考察のしがい"
+        ];
+
+        // 最小限のデータベース（あいまい検索用：これにヒットするか、新規なら自動補完されます）
+        let animeDatabase = [
+            { title: "進撃の巨人", scores: [7,6,7,7,7,6,7,7,7,7,7,6,6,7,7] },
+            { title: "呪術廻戦", scores: [6,5,6,5,6,5,6,7,7,7,7,5,5,7,5] },
+            { title: "チェンソーマン", scores: [6,5,7,5,7,7,7,7,7,6,7,5,7,6,6] },
+            { title: "葬送のフリーレン", scores: [3,6,4,6,2,7,3,6,4,7,7,7,5,4,6] }
+        ];
+
+        let coins = 3;
+        let radarChartInstance = null;
+
+        // 初期化処理：スライダーを自動生成
+        function initSliders() {
+            const container = document.getElementById('sliders-container');
+            const reviewContainer = document.getElementById('review-sliders-container');
+            
+            let html = '';
+            axes.forEach((axis, i) => {
+                html += `
+                    <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="font-medium text-slate-300">${axis}</span>
+                            <span id="val-${i}" class="text-purple-400 font-bold">4点</span>
+                        </div>
+                        <input type="range" min="1" max="7" value="4" id="slider-${i}" 
+                               oninput="document.getElementById('val-${i}').innerText = this.value + '点'"
+                               class="w-full accent-purple-500 cursor-pointer">
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+            reviewContainer.innerHTML = html;
+        }
+
+        // Fuse.js あいまい検索の設定
+        const fuse = new Fuse(animeDatabase, { keys: ['title'], threshold: 0.4 });
+
+        document.getElementById('user-search-input').addEventListener('input', (e) => {
+            const query = e.target.value;
+            const feedback = document.getElementById('search-feedback');
+            if (!query) {
+                feedback.innerText = "💡 入力に合わせて自動で作品を推測します";
+                return;
+            }
+            const results = fuse.search(query);
+            if (results.length > 0) {
+                feedback.innerText = `🎯 予測マッチ: 「${results[0].item.title}」`;
+            } else {
+                feedback.innerText = "✨ 新規作品として登録・分析します";
+            }
+        });
+
+        // 診断実行ロジック
+        function runDiagnosis() {
+            if (coins < 1) {
+                alert("コインが足りません！「作品を評価」タブからコインを獲得してください。");
+                switchTab('review');
+                return;
+            }
+
+            coins -= 1;
+            updateCoinDisplay();
+
+            // ユーザーの入力値を取得
+            let userScores = [];
+            for (let i = 0; i < axes.length; i++) {
+                userScores.push(parseInt(document.getElementById(`slider-${i}`).value));
+            }
+
+            const query = document.getElementById('user-search-input').value.trim();
+            let targetAnime = animeDatabase[0];
+
+            if (query) {
+                const results = fuse.search(query);
+                if (results.length > 0) {
+                    targetAnime = results[0].item;
+                } else {
+                    // データベースにない場合は簡易的にターゲットを作成
+                    targetAnime = { title: query, scores: userScores.map(v => Math.min(7, Math.max(1, v + (Math.random() * 2 - 1)))) };
+                }
+            }
+
+            // 類似度（シンクロ率）の簡易計算
+            let diffSum = 0;
+            for (let i = 0; i < axes.length; i++) {
+                let diff = Math.abs(userScores[i] - targetAnime.scores[i]);
+                diffSum += diff;
+            }
+            let maxDiff = axes.length * 6;
+            let similarity = Math.max(70, Math.round((1 - (diffSum / maxDiff)) * 100 * 10) / 10);
+
+            // 結果表示
+            document.getElementById('result-container').classList.remove('hidden');
+            document.getElementById('match-title').innerText = targetAnime.title;
+            document.getElementById('match-score').innerText = `シンクロ率: ${similarity}%`;
+
+            // レーダーチャート描画
+            drawRadarChart(userScores, targetAnime.scores, targetAnime.title);
+            
+            // スクロール誘導
+            document.getElementById('result-container').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // レーダーチャートを描画
+        function drawRadarChart(userScores, animeScores, animeTitle) {
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            if (radarChartInstance) {
+                radarChartInstance.destroy();
+            }
+
+            radarChartInstance = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: axes,
+                    datasets: [
+                        {
+                            label: 'あなたの好み',
+                            data: userScores,
+                            backgroundColor: 'rgba(168, 85, 247, 0.2)',
+                            borderColor: 'rgba(168, 85, 247, 1)',
+                            borderWidth: 2,
+                        },
+                        {
+                            label: animeTitle,
+                            data: animeScores,
+                            backgroundColor: 'rgba(236, 72, 153, 0.2)',
+                            borderColor: 'rgba(236, 72, 153, 1)',
+                            borderWidth: 2,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            min: 0,
+                            max: 7,
+                            ticks: { display: false, stepSize: 1 },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                            pointLabels: { color: '#cbd5e1', font: { size: 10 } }
+                        }
+                    },
+                    plugins: { legend: { labels: { color: '#fff', font: { size: 11 } } } }
+                }
+            });
+        }
+
+        // コイン獲得（評価送信）
+        function submitReview() {
+            const animeName = document.getElementById('review-anime-name').value.trim();
+            if (!animeName) {
+                alert("作品名を入力してください！");
+                return;
+            }
+            coins += 1;
+            updateCoinDisplay();
+            alert(`「${animeName}」の評価を送信しました！コインが1枚増えました！`);
+            document.getElementById('review-anime-name').value = '';
+        }
+
+        // コイン表示の更新
+        function updateCoinDisplay() {
+            document.getElementById('coin-count').innerText = coins;
+            document.getElementById('mypage-coins').innerText = coins + "枚";
+        }
+
+        // タブ切り替え
+        function switchTab(tabId) {
+            ['diagnosis', 'review', 'mypage'].forEach(id => {
+                document.getElementById(`tab-${id}`).classList.add('hidden');
+                document.getElementById(`btn-${id}`).classList.remove('text-purple-400', 'font-bold');
+                document.getElementById(`btn-${id}`).classList.add('text-slate-400');
+            });
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            document.getElementById(`btn-${tabId}`).classList.remove('text-slate-400');
+            document.getElementById(`btn-${tabId}`).classList.add('text-purple-400', 'font-bold');
+        }
+
+        // 起動時初期化
+        window.onload = initSliders;
+    </script>
+</body>
+</html>
